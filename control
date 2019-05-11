@@ -1,0 +1,9 @@
+Package: com.dgh0st.flexall
+Name: FLEXall
+Depends: mobilesubstrate
+Version: 0.0.1
+Architecture: iphoneos-arm
+Description: Load FLEX loader dynamically.
+Maintainer: DGh0st <deeppwnage@yahoo.com>
+Author: DGh0st <deeppwnage@yahoo.com>
+Section: Tweaks
