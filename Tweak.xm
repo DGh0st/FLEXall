@@ -21,9 +21,26 @@
 
 @interface SBBacklightController : NSObject // iOS 7 - 12
 +(id)sharedInstance; // iOS 7 - 12
--(NSTimeInterval)defaultLockScreenDimInterval; // iOS 7 - 12
--(void)preventIdleSleepForNumberOfSeconds:(NSTimeInterval)arg1; // iOS 7 - 12
+// -(NSTimeInterval)defaultLockScreenDimInterval; // iOS 7 - 12
+// -(void)preventIdleSleepForNumberOfSeconds:(NSTimeInterval)arg1; // iOS 7 - 12
 -(void)resetLockScreenIdleTimer; // iOS 7 - 10
+@end
+
+@interface SBDashBoardIdleTimerProvider : NSObject // iOS 11 - 12
+// -(void)addDisabledIdleTimerAssertionReason:(id)arg1; // iOS 11 - 12
+// -(void)removeDisabledIdleTimerAssertionReason:(id)arg1; // iOS 11 - 12
+// -(BOOL)isDisabledAssertionActiveForReason:(id)arg1; // iOS 11 - 12
+-(void)resetIdleTimer; // iOS 11 - 12
+@end
+
+@interface SBDashBoardViewController : UIViewController { // iOS 10 - 12
+	SBDashBoardIdleTimerProvider *_idleTimerProvider; // iOS 11 - 12
+}
+@end
+
+@interface SBCoverSheetPresentationManager : NSObject // iOS 11 - 12
++(id)sharedInstance; // iOS 11 - 12
+-(id)dashBoardViewController; // iOS 11 - 12
 @end
 
 @interface UIStatusBarWindow : UIWindow // iOS 4 - 12
@@ -69,10 +86,13 @@
 	id result = %orig();
 	if ([(SpringBoard *)[%c(SpringBoard) sharedApplication] isLocked]) {
 		SBBacklightController *backlightController = [%c(SBBacklightController) sharedInstance];
-		if ([backlightController respondsToSelector:@selector(resetLockScreenIdleTimer)])
+		if ([backlightController respondsToSelector:@selector(resetLockScreenIdleTimer)]) {
 			[backlightController resetLockScreenIdleTimer];
-		else
-			[backlightController preventIdleSleepForNumberOfSeconds:[backlightController defaultLockScreenDimInterval]];
+		} else {
+			SBDashBoardViewController *dashBoardViewController = [[%c(SBCoverSheetPresentationManager) sharedInstance] dashBoardViewController];
+			SBDashBoardIdleTimerProvider *_idleTimerProvider = [dashBoardViewController valueForKey:@"_idleTimerProvider"];
+			[_idleTimerProvider resetIdleTimer];
+		}
 	}
 	return result;
 }
