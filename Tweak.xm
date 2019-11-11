@@ -3,34 +3,23 @@
 #import "FLEXExplorerViewController.h"
 #import "FLEXObjectExplorerViewController.h"
 
-@interface SpringBoard : UIApplication // iOS 3 - 12
--(BOOL)isLocked; // iOS 4 - 12
--(id)statusBar; // iOS 4 - 12
--(id)_accessibilityTopDisplay; // iOS 5 - 12
+@interface SpringBoard : UIApplication // iOS 3 - 13
+-(BOOL)isLocked; // iOS 4 - 13
+// -(id)_accessibilityTopDisplay; // iOS 5 - 13
 @end
 
-@interface UIStatusBar : UIView // iOS 4 - 12
--(id)foregroundColor; // iOS 7 - 12 (inherited on iOS 11+)
--(void)setForegroundColor:(id)arg1; // iOS 7 - 12 (inherited on iOS 11+)
-@end
-
-@interface _UIStatusBar : UIView // iOS 11 - 12 (modern status bar)
--(id)foregroundColor; // iOS 11 - 12
--(void)setForegroundColor:(id)arg1; // iOS 11 - 12
-@end
-
-@interface SBBacklightController : NSObject // iOS 7 - 12
-+(id)sharedInstance; // iOS 7 - 12
-// -(NSTimeInterval)defaultLockScreenDimInterval; // iOS 7 - 12
-// -(void)preventIdleSleepForNumberOfSeconds:(NSTimeInterval)arg1; // iOS 7 - 12
+@interface SBBacklightController : NSObject // iOS 7 - 13
++(id)sharedInstance; // iOS 7 - 13
+// -(NSTimeInterval)defaultLockScreenDimInterval; // iOS 7 - 13
+// -(void)preventIdleSleepForNumberOfSeconds:(NSTimeInterval)arg1; // iOS 7 - 13
 -(void)resetLockScreenIdleTimer; // iOS 7 - 10
 @end
 
-@interface SBDashBoardIdleTimerProvider : NSObject // iOS 11 - 12
-// -(void)addDisabledIdleTimerAssertionReason:(id)arg1; // iOS 11 - 12
-// -(void)removeDisabledIdleTimerAssertionReason:(id)arg1; // iOS 11 - 12
-// -(BOOL)isDisabledAssertionActiveForReason:(id)arg1; // iOS 11 - 12
--(void)resetIdleTimer; // iOS 11 - 12
+@interface SBDashBoardIdleTimerProvider : NSObject // iOS 11 - 13
+// -(void)addDisabledIdleTimerAssertionReason:(id)arg1; // iOS 11 - 13
+// -(void)removeDisabledIdleTimerAssertionReason:(id)arg1; // iOS 11 - 13
+// -(BOOL)isDisabledAssertionActiveForReason:(id)arg1; // iOS 11 - 13
+-(void)resetIdleTimer; // iOS 11 - 13
 @end
 
 @interface SBDashBoardViewController : UIViewController { // iOS 10 - 12
@@ -38,16 +27,30 @@
 }
 @end
 
-@interface SBCoverSheetPresentationManager : NSObject // iOS 11 - 12
-+(id)sharedInstance; // iOS 11 - 12
--(id)dashBoardViewController; // iOS 11 - 12
+@interface SBDashBoardIdleTimerController : NSObject { // iOS 13
+	SBDashBoardIdleTimerProvider *_dashBoardIdleTimerProvider; // iOS 13
+}
 @end
 
-@interface UIStatusBarWindow : UIWindow // iOS 4 - 12
+@interface CSCoverSheetViewController : UIViewController // iOS 13
+-(id)idleTimerController; // iOS 13
+@end
+
+@interface SBCoverSheetPresentationManager : NSObject // iOS 11 - 13
++(id)sharedInstance; // iOS 11 - 13
+-(id)dashBoardViewController; // iOS 11 - 12
+-(id)coverSheetViewController; // iOS 13
+@end
+
+@interface UIStatusBarWindow : UIWindow // iOS 4 - 13
+@end
+
+@interface UIStatusBarManager : NSObject // iOS 13
+@property (nonatomic, retain) UIView *longPressStatusBarView;
+@property (nonatomic, readonly) CGRect statusBarFrame; // iOS 13
 @end
 
 @interface FLEXExplorerViewController (PrivateFLEXall)
-@property (nonatomic, strong) UIColor *previousStatusBarForegroundColor;
 -(void)resignKeyAndDismissViewControllerAnimated:(BOOL)arg1 completion:(id)arg2;
 @end
 
@@ -55,18 +58,22 @@
 @property (nonatomic, strong) FLEXExplorerViewController *explorerViewController;
 @end
 
-#define REGISTER_THREE_FINGER_GESTURE()																																	\
-	if (![self isKindOfClass:%c(FLEXWindow)]) {																											\
-		UILongPressGestureRecognizer *threeFinger = [[UILongPressGestureRecognizer alloc] initWithTarget:[FLEXManager sharedManager] action:@selector(showExplorer)];	\
-		threeFinger.numberOfTouchesRequired = 3;																																\
-		[self addGestureRecognizer:threeFinger];																														\
+@interface NSObject (PrivateFLEXall)
+-(id)safeValueForKey:(id)arg1;
+@end
+
+#define REGISTER_LONG_PRESS_GESTURE(window, fingers)																												\
+	if (![window isKindOfClass:%c(FLEXWindow)]) {																													\
+		UILongPressGestureRecognizer *longPress = [[UILongPressGestureRecognizer alloc] initWithTarget:[FLEXManager sharedManager] action:@selector(showExplorer)];	\
+		longPress.numberOfTouchesRequired = fingers;																												\
+		[window addGestureRecognizer:longPress];																													\
 	}
 
 %hook UIWindow
 -(void)becomeKeyWindow {
 	%orig();
 
-	REGISTER_THREE_FINGER_GESTURE();
+	REGISTER_LONG_PRESS_GESTURE(self, 3);
 }
 %end
 
@@ -89,8 +96,15 @@
 		if ([backlightController respondsToSelector:@selector(resetLockScreenIdleTimer)]) {
 			[backlightController resetLockScreenIdleTimer];
 		} else {
-			SBDashBoardViewController *dashBoardViewController = [[%c(SBCoverSheetPresentationManager) sharedInstance] dashBoardViewController];
-			SBDashBoardIdleTimerProvider *_idleTimerProvider = [dashBoardViewController valueForKey:@"_idleTimerProvider"];
+			SBCoverSheetPresentationManager *presentationManager = [%c(SBCoverSheetPresentationManager) sharedInstance];
+			SBDashBoardIdleTimerProvider *_idleTimerProvider = nil;
+			if ([presentationManager respondsToSelector:@selector(dashBoardViewController)]) {
+				SBDashBoardViewController *dashBoardViewController = [presentationManager dashBoardViewController];
+				_idleTimerProvider = [dashBoardViewController safeValueForKey:@"_idleTimerProvider"];
+			} else if ([presentationManager respondsToSelector:@selector(coverSheetViewController)]) {
+				SBDashBoardIdleTimerController *dashboardIdleTimerController = [[presentationManager coverSheetViewController] idleTimerController];
+				_idleTimerProvider = [dashboardIdleTimerController safeValueForKey:@"_dashBoardIdleTimerProvider"];
+			}
 			[_idleTimerProvider resetIdleTimer];
 		}
 	}
@@ -116,42 +130,8 @@
 -(id)initWithFrame:(CGRect)arg1 {
 	self = %orig(arg1);
 	if (self != nil) {
-		UILongPressGestureRecognizer *longPress = [[UILongPressGestureRecognizer alloc] initWithTarget:[FLEXManager sharedManager] action:@selector(showExplorer)];
-		[self addGestureRecognizer:longPress];
+		REGISTER_LONG_PRESS_GESTURE(self, 1);
 	}
 	return self;
 }
 %end
-
-%group StatusBarFixColor
-%hook FLEXExplorerViewController
-%property (nonatomic, strong) UIColor *previousStatusBarForegroundColor;
-
--(void)makeKeyAndPresentViewController:(id)arg1 animated:(BOOL)arg2 completion:(id)arg3 {
-	%orig(arg1, arg2, arg3);
-
-	id statusBar = [(SpringBoard *)[%c(SpringBoard) sharedApplication] statusBar];
-	self.previousStatusBarForegroundColor = [statusBar foregroundColor];
-	[statusBar setForegroundColor:[UIColor blackColor]];
-}
-
--(void)resignKeyAndDismissViewControllerAnimated:(BOOL)arg1 completion:(id)arg2 {
-	%orig(arg1, arg2);
-
-	id statusBar = [(SpringBoard *)[%c(SpringBoard) sharedApplication] statusBar];
-	if (self.previousStatusBarForegroundColor != nil) {
-		if ([statusBar isKindOfClass:%c(_UIStatusBar)])
-			[(_UIStatusBar *)statusBar setForegroundColor:self.previousStatusBarForegroundColor];
-		else if ([statusBar isKindOfClass:%c(UIStatusBar)])
-			[(UIStatusBar *)statusBar setForegroundColor:self.previousStatusBarForegroundColor];
-		self.previousStatusBarForegroundColor = nil;
-	}
-}
-%end
-%end
-
-%ctor {
-	if (%c(SpringBoard))
-		%init(StatusBarFixColor);
-	%init();
-}
