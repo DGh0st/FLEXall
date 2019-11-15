@@ -3,8 +3,13 @@
 #import "FLEXExplorerViewController.h"
 #import "FLEXObjectExplorerViewController.h"
 
+@interface SBApplication
+@property (nonatomic, strong) NSString *bundleIdentifier;
+@end
+
 @interface SpringBoard : UIApplication // iOS 3 - 13
 -(BOOL)isLocked; // iOS 4 - 13
+-(SBApplication *)_accessibilityFrontMostApplication;
 // -(id)_accessibilityTopDisplay; // iOS 5 - 13
 @end
 
@@ -63,6 +68,26 @@
 		longPress.numberOfTouchesRequired = fingers;																												\
 		[window addGestureRecognizer:longPress];																													\
 	}
+
+static const NSString *bundleId = [NSBundle mainBundle].bundleIdentifier;
+static const BOOL isSpringBoard = [bundleId isEqualToString:@"com.apple.springboard"];
+
+%group iOS13
+%hook UIWindow
+- (void)touchesBegan:(NSSet *)touches withEvent:(UIEvent *)event {
+	%orig();
+	CGPoint location = [[[event allTouches] anyObject] locationInView:self];
+	CGRect statusBarFrame = [UIApplication sharedApplication].keyWindow.windowScene.statusBarManager.statusBarFrame;
+	if(CGRectContainsPoint(statusBarFrame, location) && isSpringBoard)
+		if([(SpringBoard *)[UIApplication sharedApplication] _accessibilityFrontMostApplication] != nil)
+			CFNotificationCenterPostNotification(CFNotificationCenterGetDarwinNotifyCenter(),
+										  CFSTR("flexmanager/show.flex"),
+										  NULL,
+										  NULL,
+										  false);
+}
+%end
+%end
 
 %hook UIWindow
 -(void)becomeKeyWindow {
@@ -144,3 +169,21 @@
 	return self;
 }
 %end
+
+void showFLEX(){
+	if(!isSpringBoard)
+		[[FLEXManager sharedManager] showExplorer];
+}
+
+%ctor{
+	%init(_ungrouped);
+	if(@available(iOS 13, *)){
+		CFNotificationCenterAddObserver(CFNotificationCenterGetDarwinNotifyCenter(),
+                                NULL,
+                                (CFNotificationCallback)showFLEX,
+                                CFSTR("flexmanager/show.flex"),
+                                NULL,
+                                CFNotificationSuspensionBehaviorDeliverImmediately);
+		%init(iOS13);
+	}
+}
