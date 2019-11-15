@@ -45,11 +45,6 @@
 @interface UIStatusBarWindow : UIWindow // iOS 4 - 13
 @end
 
-@interface UIStatusBarManager : NSObject // iOS 13
-@property (nonatomic, retain) UIView *longPressStatusBarView;
-@property (nonatomic, readonly) CGRect statusBarFrame; // iOS 13
-@end
-
 @interface FLEXExplorerViewController (PrivateFLEXall)
 -(void)resignKeyAndDismissViewControllerAnimated:(BOOL)arg1 completion:(id)arg2;
 @end
@@ -118,6 +113,20 @@
 
 	if (self.navigationItem.rightBarButtonItems.count == 0)
 		self.navigationItem.rightBarButtonItem = [[UIBarButtonItem alloc] initWithBarButtonSystemItem:UIBarButtonSystemItemDone target:self action:@selector(handleDonePressed:)];
+}
+
+-(NSArray<NSNumber *> *)possibleExplorerSections {
+	static NSArray<NSNumber *> *possibleSections = %orig();
+	static dispatch_once_t onceToken;
+	dispatch_once(&onceToken, ^{
+		NSNumber *referencingInstancesSection = @(FLEXObjectExplorerSectionReferencingInstances);
+		NSMutableArray<NSNumber *> *newSections = [possibleSections mutableCopy];
+		[newSections removeObject:referencingInstancesSection];
+		NSUInteger newIndex = [newSections indexOfObject:@(FLEXObjectExplorerSectionCustom)];
+		[newSections insertObject:referencingInstancesSection atIndex:newIndex + 1];
+		possibleSections = [newSections copy];
+	});
+	return possibleSections;
 }
 
 %new
