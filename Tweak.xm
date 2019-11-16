@@ -45,6 +45,17 @@
 @interface UIStatusBarWindow : UIWindow // iOS 4 - 13
 @end
 
+@interface UIStatusBarTapAction : NSObject // iOS 13
+@property (nonatomic, readonly) NSInteger type; // iOS 13
+@end
+
+@interface UIStatusBar : UIView // iOS 4 - 13
+@end
+
+@interface SBMainDisplaySceneLayoutStatusBarView : UIView // iOS 13
+-(void)_statusBarTapped:(id)arg1 type:(NSInteger)arg2; // iOS 13
+@end
+
 @interface FLEXExplorerViewController (PrivateFLEXall)
 -(void)resignKeyAndDismissViewControllerAnimated:(BOOL)arg1 completion:(id)arg2;
 @end
@@ -56,6 +67,8 @@
 @interface NSObject (PrivateFLEXall)
 -(id)safeValueForKey:(id)arg1;
 @end
+
+#define kFLEXallLongPressType 1337
 
 #define REGISTER_LONG_PRESS_GESTURE(window, fingers)																												\
 	if (![window isKindOfClass:%c(FLEXWindow)]) {																													\
@@ -144,3 +157,42 @@
 	return self;
 }
 %end
+
+%group iOS13plusStatusBar
+// runs in SpringBoard
+%hook SBMainDisplaySceneLayoutStatusBarView
+-(void)_addStatusBarIfNeeded {
+	%orig();
+
+	UIStatusBar *_statusBar = [self valueForKey:@"_statusBar"];
+	UILongPressGestureRecognizer *longPress = [[UILongPressGestureRecognizer alloc] initWithTarget:self action:@selector(_statusBarLongPressed:)];
+	[_statusBar addGestureRecognizer:longPress];
+}
+
+%new
+-(void)_statusBarLongPressed:(UILongPressGestureRecognizer *)recognizer {
+	if (recognizer.state == UIGestureRecognizerStateBegan) {
+		[self _statusBarTapped:recognizer type:kFLEXallLongPressType];
+	}
+}
+%end
+
+%hook UIStatusBarManager
+// handled in applications
+-(void)handleTapAction:(UIStatusBarTapAction *)arg1 {
+	if (arg1.type == kFLEXallLongPressType) {
+		[[FLEXManager sharedManager] showExplorer];
+	} else {
+		%orig(arg1);
+	}
+}
+%end
+%end
+
+%ctor {
+	if (%c(UIStatusBarManager)) {
+		%init(iOS13plusStatusBar);
+	}
+
+	%init();
+}
