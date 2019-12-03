@@ -1,6 +1,6 @@
 Package: com.dgh0st.flexall
 Name: FLEXall
-Depends: mobilesubstrate
+Depends: mobilesubstrate, libflex
 Version: 0.0.1
 Architecture: iphoneos-arm
 Description: Load FLEX loader dynamically.

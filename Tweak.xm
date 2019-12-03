@@ -61,7 +61,7 @@
 @end
 
 @interface FLEXManager (PrivateFLEXall)
-@property (nonatomic, strong) FLEXExplorerViewController *explorerViewController;
+@property (nonatomic) FLEXExplorerViewController *explorerViewController;
 @end
 
 @interface NSObject (PrivateFLEXall)
@@ -70,11 +70,11 @@
 
 #define kFLEXallLongPressType 1337
 
-#define REGISTER_LONG_PRESS_GESTURE(window, fingers)																												\
-	if (![window isKindOfClass:%c(FLEXWindow)]) {																													\
-		UILongPressGestureRecognizer *longPress = [[UILongPressGestureRecognizer alloc] initWithTarget:[FLEXManager sharedManager] action:@selector(showExplorer)];	\
-		longPress.numberOfTouchesRequired = fingers;																												\
-		[window addGestureRecognizer:longPress];																													\
+#define REGISTER_LONG_PRESS_GESTURE(window, fingers)																													\
+	if (![window isKindOfClass:%c(FLEXWindow)]) {																														\
+		UILongPressGestureRecognizer *longPress = [[UILongPressGestureRecognizer alloc] initWithTarget:[%c(FLEXManager) sharedManager] action:@selector(showExplorer)];	\
+		longPress.numberOfTouchesRequired = fingers;																													\
+		[window addGestureRecognizer:longPress];																														\
 	}
 
 %hook UIWindow
@@ -144,7 +144,8 @@
 
 %new
 -(void)handleDonePressed:(id)arg1 {
-	[[FLEXManager sharedManager].explorerViewController resignKeyAndDismissViewControllerAnimated:YES completion:nil];
+	FLEXManager *flexManager = [%c(FLEXManager) sharedManager];
+	[flexManager.explorerViewController resignKeyAndDismissViewControllerAnimated:YES completion:nil];
 }
 %end
 
@@ -181,7 +182,7 @@
 // handled in applications
 -(void)handleTapAction:(UIStatusBarTapAction *)arg1 {
 	if (arg1.type == kFLEXallLongPressType) {
-		[[FLEXManager sharedManager] showExplorer];
+		[[%c(FLEXManager) sharedManager] showExplorer];
 	} else {
 		%orig(arg1);
 	}
@@ -190,9 +191,11 @@
 %end
 
 %ctor {
-	if (%c(UIStatusBarManager)) {
-		%init(iOS13plusStatusBar);
-	}
+	if (dlopen("/Library/MobileSubstrate/DynamicLibraries/libFLEX.dylib", RTLD_LAZY)) {
+		if (%c(UIStatusBarManager)) {
+			%init(iOS13plusStatusBar);
+		}
 
-	%init();
+		%init();
+	}
 }

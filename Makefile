@@ -1,6 +1,7 @@
 export ARCHS = armv7 armv7s arm64 arm64e
-export TARGET = iphone:clang:latest:9.0
+export TARGET = iphone:clang:13.2:9.0
 
+# Only needs this for the header files
 FLEX_FOLDER_PATH = $(THEOS_PROJECT_DIR)/FLEX
 
 after-clean::
@@ -14,9 +15,8 @@ include $(THEOS)/makefiles/common.mk
 dtoim = $(foreach dir,$(1),-I$(dir))
 
 TWEAK_NAME = FLEXall
-FLEXall_FRAMEWORKS = CoreGraphics UIKit ImageIO QuartzCore
-FLEXall_FILES = Tweak.xm $(shell find $(FLEX_FOLDER_PATH)/CLASSES -name '*.m' -o -name '*.mm')
-Flexall_LIBRARIES = sqlite3 z
+FLEXall_FRAMEWORKS = UIKit
+FLEXall_FILES = Tweak.xm
 FLEXall_CFLAGS += -fobjc-arc -w $(call dtoim, $(shell find $(FLEX_FOLDER_PATH)/CLASSES -type d))
 
 include $(THEOS_MAKE_PATH)/tweak.mk
