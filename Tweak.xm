@@ -1,8 +1,3 @@
-#import "FLEXManager.h"
-#import "FLEXWindow.h"
-#import "FLEXExplorerViewController.h"
-#import "FLEXObjectExplorerViewController.h"
-
 @interface SpringBoard : UIApplication // iOS 3 - 13
 -(BOOL)isLocked; // iOS 4 - 13
 // -(id)_accessibilityTopDisplay; // iOS 5 - 13
@@ -16,10 +11,10 @@
 @end
 
 @interface SBDashBoardIdleTimerProvider : NSObject // iOS 11 - 13
-// -(void)addDisabledIdleTimerAssertionReason:(id)arg1; // iOS 11 - 13
-// -(void)removeDisabledIdleTimerAssertionReason:(id)arg1; // iOS 11 - 13
+-(void)addDisabledIdleTimerAssertionReason:(id)arg1; // iOS 11 - 13
+-(void)removeDisabledIdleTimerAssertionReason:(id)arg1; // iOS 11 - 13
 // -(BOOL)isDisabledAssertionActiveForReason:(id)arg1; // iOS 11 - 13
--(void)resetIdleTimer; // iOS 11 - 13
+// -(void)resetIdleTimer; // iOS 11 - 13
 @end
 
 @interface SBDashBoardViewController : UIViewController { // iOS 10 - 12
@@ -56,38 +51,83 @@
 -(void)_statusBarTapped:(id)arg1 type:(NSInteger)arg2; // iOS 13
 @end
 
-@interface FLEXExplorerViewController (PrivateFLEXall)
+@interface FLEXExplorerViewController : UIViewController
 -(void)resignKeyAndDismissViewControllerAnimated:(BOOL)arg1 completion:(id)arg2;
 @end
 
-@interface FLEXManager (PrivateFLEXall)
+@interface FLEXManager : NSObject
 @property (nonatomic) FLEXExplorerViewController *explorerViewController;
++(FLEXManager *)sharedManager;
+-(void)showExplorer;
+@end
+
+@interface FLEXWindow : UIWindow
+@end
+
+typedef NS_ENUM(NSUInteger, FLEXObjectExplorerSection) {
+    FLEXObjectExplorerSectionDescription,
+    FLEXObjectExplorerSectionCustom,
+    FLEXObjectExplorerSectionProperties,
+    FLEXObjectExplorerSectionIvars,
+    FLEXObjectExplorerSectionMethods,
+    FLEXObjectExplorerSectionClassMethods,
+    FLEXObjectExplorerSectionSuperclasses,
+    FLEXObjectExplorerSectionReferencingInstances
+};
+
+@interface FLEXObjectExplorerViewController : UITableViewController
 @end
 
 @interface NSObject (PrivateFLEXall)
 -(id)safeValueForKey:(id)arg1;
 @end
 
+@interface UIWindow (PrivateFLEXall)
+@property (nonatomic, strong) UILongPressGestureRecognizer *flexAllLongPress;
+@end
+
 #define kFLEXallLongPressType 1337
 
-#define REGISTER_LONG_PRESS_GESTURE(window, fingers)																													\
-	if (![window isKindOfClass:%c(FLEXWindow)]) {																														\
-		UILongPressGestureRecognizer *longPress = [[UILongPressGestureRecognizer alloc] initWithTarget:[%c(FLEXManager) sharedManager] action:@selector(showExplorer)];	\
-		longPress.numberOfTouchesRequired = fingers;																													\
-		[window addGestureRecognizer:longPress];																														\
+static UILongPressGestureRecognizer *RegisterLongPressGesture(UIWindow *window, NSUInteger fingers) {
+	UILongPressGestureRecognizer *longPress = nil;
+	if (![window isKindOfClass:%c(FLEXWindow)]) {
+		longPress = [[UILongPressGestureRecognizer alloc] initWithTarget:[%c(FLEXManager) sharedManager] action:@selector(showExplorer)];
+		longPress.numberOfTouchesRequired = fingers;
+		[window addGestureRecognizer:longPress];
 	}
+	return longPress;
+}
 
 %hook UIWindow
+%property (nonatomic, strong) UILongPressGestureRecognizer *flexAllLongPress;
+
 -(void)becomeKeyWindow {
 	%orig();
 
-	REGISTER_LONG_PRESS_GESTURE(self, 3);
+	if (self.flexAllLongPress == nil) {
+		self.flexAllLongPress = RegisterLongPressGesture(self, 3);
+	}
+}
+
+-(void)resignKeyWindow {
+	if (self.flexAllLongPress != nil) {
+		[self removeGestureRecognizer:self.flexAllLongPress];
+		self.flexAllLongPress = nil;
+	}
+
+	%orig();
+}
+%end
+
+%hook FLEXExplorerViewController
+-(BOOL)_canShowWhileLocked {
+	return YES;
 }
 %end
 
 %hook FLEXWindow
 -(BOOL)_shouldCreateContextAsSecure {
-	return YES;	
+	return YES;
 }
 
 -(id)initWithFrame:(CGRect)arg1 {
@@ -95,28 +135,6 @@
 	if (self != nil)
 		self.windowLevel = 2050; // above springboard alert window but below flash window (and callout bar stuff)
 	return self;
-}
-
--(id)hitTest:(CGPoint)arg1 withEvent:(id)arg2 {
-	id result = %orig();
-	if ([(SpringBoard *)[%c(SpringBoard) sharedApplication] isLocked]) {
-		SBBacklightController *backlightController = [%c(SBBacklightController) sharedInstance];
-		if ([backlightController respondsToSelector:@selector(resetLockScreenIdleTimer)]) {
-			[backlightController resetLockScreenIdleTimer];
-		} else {
-			SBCoverSheetPresentationManager *presentationManager = [%c(SBCoverSheetPresentationManager) sharedInstance];
-			SBDashBoardIdleTimerProvider *_idleTimerProvider = nil;
-			if ([presentationManager respondsToSelector:@selector(dashBoardViewController)]) {
-				SBDashBoardViewController *dashBoardViewController = [presentationManager dashBoardViewController];
-				_idleTimerProvider = [dashBoardViewController safeValueForKey:@"_idleTimerProvider"];
-			} else if ([presentationManager respondsToSelector:@selector(coverSheetViewController)]) {
-				SBDashBoardIdleTimerController *dashboardIdleTimerController = [[presentationManager coverSheetViewController] idleTimerController];
-				_idleTimerProvider = [dashboardIdleTimerController safeValueForKey:@"_dashBoardIdleTimerProvider"];
-			}
-			[_idleTimerProvider resetIdleTimer];
-		}
-	}
-	return result;
 }
 %end
 
@@ -153,7 +171,7 @@
 -(id)initWithFrame:(CGRect)arg1 {
 	self = %orig(arg1);
 	if (self != nil) {
-		REGISTER_LONG_PRESS_GESTURE(self, 1);
+		RegisterLongPressGesture(self, 1);
 	}
 	return self;
 }
@@ -190,10 +208,73 @@
 %end
 %end
 
+%group iOS11plusDisableIdleTimer
+static SBDashBoardIdleTimerProvider *GetDashBoardIdleTimerProvider() {
+	SBCoverSheetPresentationManager *presentationManager = [%c(SBCoverSheetPresentationManager) sharedInstance];
+	SBDashBoardIdleTimerProvider *_idleTimerProvider = nil;
+	if ([presentationManager respondsToSelector:@selector(dashBoardViewController)]) {
+		SBDashBoardViewController *dashBoardViewController = [presentationManager dashBoardViewController];
+		_idleTimerProvider = [dashBoardViewController safeValueForKey:@"_idleTimerProvider"];
+	} else if ([presentationManager respondsToSelector:@selector(coverSheetViewController)]) {
+		SBDashBoardIdleTimerController *dashboardIdleTimerController = [[presentationManager coverSheetViewController] idleTimerController];
+		_idleTimerProvider = [dashboardIdleTimerController safeValueForKey:@"_dashBoardIdleTimerProvider"];
+	}
+	return _idleTimerProvider;
+}
+
+%hook FLEXManager
+-(void)showExplorer {
+	%orig();
+
+	[GetDashBoardIdleTimerProvider() addDisabledIdleTimerAssertionReason:@"FLEXall"];
+}
+
+-(void)hideExplorer {
+	%orig();
+
+	[GetDashBoardIdleTimerProvider() removeDisabledIdleTimerAssertionReason:@"FLEXall"];
+}
+%end
+%end
+
+%group preiOS11ResetIdleTimer
+%hook FLEXWindow
+-(id)hitTest:(CGPoint)arg1 withEvent:(id)arg2 {
+	id result = %orig();
+	if ([(SpringBoard *)[%c(SpringBoard) sharedApplication] isLocked]) {
+		SBBacklightController *backlightController = [%c(SBBacklightController) sharedInstance];
+		[backlightController resetLockScreenIdleTimer];
+
+		/*if ([backlightController respondsToSelector:@selector(resetLockScreenIdleTimer)]) {
+			[backlightController resetLockScreenIdleTimer];
+		} else {
+			SBCoverSheetPresentationManager *presentationManager = [%c(SBCoverSheetPresentationManager) sharedInstance];
+			SBDashBoardIdleTimerProvider *_idleTimerProvider = nil;
+			if ([presentationManager respondsToSelector:@selector(dashBoardViewController)]) {
+				SBDashBoardViewController *dashBoardViewController = [presentationManager dashBoardViewController];
+				_idleTimerProvider = [dashBoardViewController safeValueForKey:@"_idleTimerProvider"];
+			} else if ([presentationManager respondsToSelector:@selector(coverSheetViewController)]) {
+				SBDashBoardIdleTimerController *dashboardIdleTimerController = [[presentationManager coverSheetViewController] idleTimerController];
+				_idleTimerProvider = [dashboardIdleTimerController safeValueForKey:@"_dashBoardIdleTimerProvider"];
+			}
+			[_idleTimerProvider resetIdleTimer];
+		}*/
+	}
+	return result;
+}
+%end
+%end
+
 %ctor {
 	if (dlopen("/Library/MobileSubstrate/DynamicLibraries/libFLEX.dylib", RTLD_LAZY)) {
 		if (%c(UIStatusBarManager)) {
 			%init(iOS13plusStatusBar);
+		}
+
+		if (%c(SBBacklightController) && [%c(SBBacklightController) instancesRespondToSelector:@selector(resetLockScreenIdleTimer)]) {
+			%init(preiOS11ResetIdleTimer);
+		} else if (%c(SBCoverSheetPresentationManager)) {
+			%init(iOS11plusDisableIdleTimer);
 		}
 
 		%init();
