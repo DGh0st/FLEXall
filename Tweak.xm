@@ -266,17 +266,23 @@ static SBDashBoardIdleTimerProvider *GetDashBoardIdleTimerProvider() {
 %end
 
 %ctor {
-	if (dlopen("/Library/MobileSubstrate/DynamicLibraries/libFLEX.dylib", RTLD_LAZY)) {
-		if (%c(UIStatusBarManager)) {
-			%init(iOS13plusStatusBar);
-		}
+	NSArray *args = [[NSProcessInfo processInfo] arguments];
+	if (args != nil && args.count != 0) {
+		NSString *execPath = args[0];
+		BOOL isSpringBoard = [[execPath lastPathComponent] isEqualToString:@"SpringBoard"];
+		BOOL isApplication = [execPath rangeOfString:@"/Application"].location != NSNotFound;
+		if ((isSpringBoard || isApplication) && dlopen("/Library/MobileSubstrate/DynamicLibraries/libFLEX.dylib", RTLD_LAZY)) {
+			if (%c(UIStatusBarManager)) {
+				%init(iOS13plusStatusBar);
+			}
 
-		if (%c(SBBacklightController) && [%c(SBBacklightController) instancesRespondToSelector:@selector(resetLockScreenIdleTimer)]) {
-			%init(preiOS11ResetIdleTimer);
-		} else if (%c(SBCoverSheetPresentationManager)) {
-			%init(iOS11plusDisableIdleTimer);
-		}
+			if (%c(SBBacklightController) && [%c(SBBacklightController) instancesRespondToSelector:@selector(resetLockScreenIdleTimer)]) {
+				%init(preiOS11ResetIdleTimer);
+			} else if (%c(SBCoverSheetPresentationManager)) {
+				%init(iOS11plusDisableIdleTimer);
+			}
 
-		%init();
+			%init();
+		}
 	}
 }
