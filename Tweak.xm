@@ -87,6 +87,7 @@ typedef NS_ENUM(NSUInteger, FLEXObjectExplorerSection) {
 @end
 
 #define kFLEXallLongPressType 1337
+#define kFLEXallWhitelistPath @"/var/mobile/Library/Preferences/com.dgh0st.flexall.whitelist.plist"
 
 static UILongPressGestureRecognizer *RegisterLongPressGesture(UIWindow *window, NSUInteger fingers) {
 	UILongPressGestureRecognizer *longPress = nil;
@@ -244,21 +245,6 @@ static SBDashBoardIdleTimerProvider *GetDashBoardIdleTimerProvider() {
 	if ([(SpringBoard *)[%c(SpringBoard) sharedApplication] isLocked]) {
 		SBBacklightController *backlightController = [%c(SBBacklightController) sharedInstance];
 		[backlightController resetLockScreenIdleTimer];
-
-		/*if ([backlightController respondsToSelector:@selector(resetLockScreenIdleTimer)]) {
-			[backlightController resetLockScreenIdleTimer];
-		} else {
-			SBCoverSheetPresentationManager *presentationManager = [%c(SBCoverSheetPresentationManager) sharedInstance];
-			SBDashBoardIdleTimerProvider *_idleTimerProvider = nil;
-			if ([presentationManager respondsToSelector:@selector(dashBoardViewController)]) {
-				SBDashBoardViewController *dashBoardViewController = [presentationManager dashBoardViewController];
-				_idleTimerProvider = [dashBoardViewController safeValueForKey:@"_idleTimerProvider"];
-			} else if ([presentationManager respondsToSelector:@selector(coverSheetViewController)]) {
-				SBDashBoardIdleTimerController *dashboardIdleTimerController = [[presentationManager coverSheetViewController] idleTimerController];
-				_idleTimerProvider = [dashboardIdleTimerController safeValueForKey:@"_dashBoardIdleTimerProvider"];
-			}
-			[_idleTimerProvider resetIdleTimer];
-		}*/
 	}
 	return result;
 }
@@ -271,7 +257,31 @@ static SBDashBoardIdleTimerProvider *GetDashBoardIdleTimerProvider() {
 		NSString *execPath = args[0];
 		BOOL isSpringBoard = [[execPath lastPathComponent] isEqualToString:@"SpringBoard"];
 		BOOL isApplication = [execPath rangeOfString:@"/Application"].location != NSNotFound;
-		if ((isSpringBoard || isApplication) && dlopen("/Library/MobileSubstrate/DynamicLibraries/libFLEX.dylib", RTLD_LAZY)) {
+
+		// get whitelisted processes
+		NSArray *whitelistedProcesses = nil;
+		if ([[NSFileManager defaultManager] fileExistsAtPath:kFLEXallWhitelistPath]) {
+			/*
+			Looks for the following format in whitelist plist:
+
+				<dict>
+					<key>whitelist</key>
+					<array>
+						<string>process.bundle.identifier</string>
+					</array>
+				</dict>
+			*/
+			NSMutableDictionary *whitelistDict = [NSMutableDictionary dictionaryWithContentsOfFile:kFLEXallWhitelistPath];
+			whitelistedProcesses = [whitelistDict objectForKey:@"whitelist"];
+		} else {
+			whitelistedProcesses = @[
+				@"com.toyopagroup.picaboo" // snapchat
+			];
+		}
+
+		NSString *processBundleIdentifier = [NSBundle mainBundle].bundleIdentifier;
+		BOOL isWhitelisted = [whitelistedProcesses containsObject:processBundleIdentifier];
+		if (!isWhitelisted && (isSpringBoard || isApplication) && dlopen("/Library/MobileSubstrate/DynamicLibraries/libFLEX.dylib", RTLD_LAZY)) {
 			if (%c(UIStatusBarManager)) {
 				%init(iOS13plusStatusBar);
 			}
