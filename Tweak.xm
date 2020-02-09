@@ -87,7 +87,7 @@ typedef NS_ENUM(NSUInteger, FLEXObjectExplorerSection) {
 @end
 
 #define kFLEXallLongPressType 1337
-#define kFLEXallWhitelistPath @"/var/mobile/Library/Preferences/com.dgh0st.flexall.whitelist.plist"
+#define kFLEXallBlacklistPath @"/var/mobile/Library/Preferences/com.dgh0st.flexall.blacklist.plist"
 
 static UILongPressGestureRecognizer *RegisterLongPressGesture(UIWindow *window, NSUInteger fingers) {
 	UILongPressGestureRecognizer *longPress = nil;
@@ -258,30 +258,30 @@ static SBDashBoardIdleTimerProvider *GetDashBoardIdleTimerProvider() {
 		BOOL isSpringBoard = [[execPath lastPathComponent] isEqualToString:@"SpringBoard"];
 		BOOL isApplication = [execPath rangeOfString:@"/Application"].location != NSNotFound;
 
-		// get whitelisted processes
-		NSArray *whitelistedProcesses = nil;
-		if ([[NSFileManager defaultManager] fileExistsAtPath:kFLEXallWhitelistPath]) {
+		// get blacklisted processes
+		NSArray *blacklistedProcesses = nil;
+		if ([[NSFileManager defaultManager] fileExistsAtPath:kFLEXallBlacklistPath]) {
 			/*
-			Looks for the following format in whitelist plist:
+			Looks for the following format in blacklist plist:
 
 				<dict>
-					<key>whitelist</key>
+					<key>blacklist</key>
 					<array>
 						<string>process.bundle.identifier</string>
 					</array>
 				</dict>
 			*/
-			NSMutableDictionary *whitelistDict = [NSMutableDictionary dictionaryWithContentsOfFile:kFLEXallWhitelistPath];
-			whitelistedProcesses = [whitelistDict objectForKey:@"whitelist"];
+			NSMutableDictionary *blacklistDict = [NSMutableDictionary dictionaryWithContentsOfFile:kFLEXallBlacklistPath];
+			blacklistedProcesses = [blacklistDict objectForKey:@"blacklist"];
 		} else {
-			whitelistedProcesses = @[
+			blacklistedProcesses = @[
 				@"com.toyopagroup.picaboo" // snapchat
 			];
 		}
 
 		NSString *processBundleIdentifier = [NSBundle mainBundle].bundleIdentifier;
-		BOOL isWhitelisted = [whitelistedProcesses containsObject:processBundleIdentifier];
-		if (!isWhitelisted && (isSpringBoard || isApplication) && dlopen("/Library/MobileSubstrate/DynamicLibraries/libFLEX.dylib", RTLD_LAZY)) {
+		BOOL isBlacklisted = [blacklistedProcesses containsObject:processBundleIdentifier];
+		if (!isBlacklisted && (isSpringBoard || isApplication) && dlopen("/Library/MobileSubstrate/DynamicLibraries/libFLEX.dylib", RTLD_LAZY)) {
 			if (%c(UIStatusBarManager)) {
 				%init(iOS13plusStatusBar);
 			}
