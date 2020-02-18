@@ -120,9 +120,18 @@ static UILongPressGestureRecognizer *RegisterLongPressGesture(UIWindow *window, 
 }
 %end
 
-%hook FLEXExplorerViewController
+%hook UIViewController
 -(BOOL)_canShowWhileLocked {
-	return YES;
+	UIViewController *currentViewController = self;
+	while (currentViewController != nil) {
+		if ([currentViewController isKindOfClass:%c(FLEXExplorerViewController)]) {
+			return YES;
+		}
+
+		currentViewController = currentViewController.presentingViewController;
+	}
+
+	return %orig();
 }
 %end
 
