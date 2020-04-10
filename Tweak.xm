@@ -52,7 +52,7 @@
 @end
 
 @interface FLEXExplorerViewController : UIViewController
--(void)resignKeyAndDismissViewControllerAnimated:(BOOL)arg1 completion:(id)arg2;
+-(void)resignKeyAndDismissViewControllerAnimated:(BOOL)arg1 completion:(id)arg2; // Pre-FLEX 4
 @end
 
 @interface FLEXManager : NSObject
@@ -64,7 +64,7 @@
 @interface FLEXWindow : UIWindow
 @end
 
-typedef NS_ENUM(NSUInteger, FLEXObjectExplorerSection) {
+typedef NS_ENUM(NSUInteger, FLEXObjectExplorerSection) { // Pre-FLEX 4
     FLEXObjectExplorerSectionDescription,
     FLEXObjectExplorerSectionCustom,
     FLEXObjectExplorerSectionProperties,
@@ -75,7 +75,15 @@ typedef NS_ENUM(NSUInteger, FLEXObjectExplorerSection) {
     FLEXObjectExplorerSectionReferencingInstances
 };
 
+@interface FLEXTableViewSection : NSObject // FLEX 4+
+@property (nonatomic, readonly, nullable) NSString *title;
+@end
+
+@interface FLEXSingleRowSection : FLEXTableViewSection // FLEX 4+
+@end
+
 @interface FLEXObjectExplorerViewController : UITableViewController
+@property (nonatomic, readonly) FLEXTableViewSection *customSection; // FLEX 4+
 @end
 
 @interface NSObject (PrivateFLEXall)
@@ -88,6 +96,8 @@ typedef NS_ENUM(NSUInteger, FLEXObjectExplorerSection) {
 
 #define kFLEXallLongPressType 1337
 #define kFLEXallBlacklistPath @"/var/mobile/Library/Preferences/com.dgh0st.flexall.blacklist.plist"
+#define kFLEXallObjectGraphSectionTitle @"Object Graph"
+#define kFLEXallDisableIdleTimerReason @"FLEXallDisableIdle"
 
 static UILongPressGestureRecognizer *RegisterLongPressGesture(UIWindow *window, NSUInteger fingers) {
 	UILongPressGestureRecognizer *longPress = nil;
@@ -124,11 +134,15 @@ static UILongPressGestureRecognizer *RegisterLongPressGesture(UIWindow *window, 
 -(BOOL)_canShowWhileLocked {
 	UIViewController *currentViewController = self;
 	while (currentViewController != nil) {
-		if ([currentViewController isKindOfClass:%c(FLEXExplorerViewController)]) {
+		if ([currentViewController isKindOfClass:%c(FLEXExplorerViewController)] || [currentViewController isKindOfClass:%c(FLEXNavigationController)]) {
 			return YES;
 		}
 
-		currentViewController = currentViewController.presentingViewController;
+		if (currentViewController.presentingViewController != nil) {
+			currentViewController = currentViewController.presentingViewController;
+		} else {
+			currentViewController = currentViewController.parentViewController;
+		}
 	}
 
 	return %orig();
@@ -152,11 +166,12 @@ static UILongPressGestureRecognizer *RegisterLongPressGesture(UIWindow *window, 
 -(void)viewDidLoad {
 	%orig();
 
-	if (self.navigationItem.rightBarButtonItems.count == 0)
+	if (self.navigationItem.rightBarButtonItems.count == 0) {
 		self.navigationItem.rightBarButtonItem = [[UIBarButtonItem alloc] initWithBarButtonSystemItem:UIBarButtonSystemItemDone target:self action:@selector(handleDonePressed:)];
+	}
 }
 
--(NSArray<NSNumber *> *)possibleExplorerSections {
+-(NSArray<NSNumber *> *)possibleExplorerSections { // Pre-FLEX 4
 	static NSArray<NSNumber *> *possibleSections = %orig();
 	static dispatch_once_t onceToken;
 	dispatch_once(&onceToken, ^{
@@ -170,10 +185,36 @@ static UILongPressGestureRecognizer *RegisterLongPressGesture(UIWindow *window, 
 	return possibleSections;
 }
 
+-(NSArray<FLEXTableViewSection *> *)makeSections { // FLEX 4+
+	NSArray<FLEXTableViewSection *> *sections = %orig();
+
+	// FLEX should never add another one of thse but this should work even if it does
+	NSArray<FLEXTableViewSection *> *singleRowSections = [sections filteredArrayUsingPredicate:[NSPredicate predicateWithBlock:^(FLEXTableViewSection *evaluatedObject, NSDictionary<NSString *,id> *bindings) {
+		if ([evaluatedObject isKindOfClass:%c(FLEXSingleRowSection)] && [evaluatedObject.title isEqualToString:kFLEXallObjectGraphSectionTitle]) {
+			return YES;
+		}
+		return NO;
+	}]];
+
+	NSUInteger customSectionIndex = [sections indexOfObject:self.customSection];
+	if (customSectionIndex != NSNotFound && singleRowSections.count > 0) {
+		NSMutableArray<FLEXTableViewSection *> *newSections = [sections mutableCopy];
+		[newSections removeObjectsInArray:singleRowSections];
+		[newSections insertObjects:singleRowSections atIndexes:[NSIndexSet indexSetWithIndexesInRange:NSMakeRange(customSectionIndex + 1, singleRowSections.count)]];
+		sections = [newSections copy];
+	}
+
+	return sections;
+}
+
 %new
 -(void)handleDonePressed:(id)arg1 {
 	FLEXManager *flexManager = [%c(FLEXManager) sharedManager];
-	[flexManager.explorerViewController resignKeyAndDismissViewControllerAnimated:YES completion:nil];
+	if ([flexManager.explorerViewController respondsToSelector:@selector(resignKeyAndDismissViewControllerAnimated:completion:)]) { // Pre-FLEX 4
+		[flexManager.explorerViewController resignKeyAndDismissViewControllerAnimated:YES completion:nil];
+	} else { // FLEX 4+
+		[flexManager.explorerViewController dismissViewControllerAnimated:YES completion:nil];
+	}
 }
 %end
 
@@ -236,13 +277,13 @@ static SBDashBoardIdleTimerProvider *GetDashBoardIdleTimerProvider() {
 -(void)showExplorer {
 	%orig();
 
-	[GetDashBoardIdleTimerProvider() addDisabledIdleTimerAssertionReason:@"FLEXall"];
+	[GetDashBoardIdleTimerProvider() addDisabledIdleTimerAssertionReason:kFLEXallDisableIdleTimerReason];
 }
 
 -(void)hideExplorer {
 	%orig();
 
-	[GetDashBoardIdleTimerProvider() removeDisabledIdleTimerAssertionReason:@"FLEXall"];
+	[GetDashBoardIdleTimerProvider() removeDisabledIdleTimerAssertionReason:kFLEXallDisableIdleTimerReason];
 }
 %end
 %end
