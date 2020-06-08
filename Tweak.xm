@@ -58,7 +58,7 @@
 @interface FLEXManager : NSObject
 @property (nonatomic) FLEXExplorerViewController *explorerViewController;
 +(FLEXManager *)sharedManager;
--(void)showExplorer;
+// -(void)showExplorer;
 @end
 
 @interface FLEXWindow : UIWindow
@@ -94,6 +94,12 @@ typedef NS_ENUM(NSUInteger, FLEXObjectExplorerSection) { // Pre-FLEX 4
 @property (nonatomic, strong) UILongPressGestureRecognizer *flexAllLongPress;
 @end
 
+// libflex symbols
+static id (*GetFLXManager)();
+static SEL (*GetFLXRevealSEL)();
+static Class (*GetFLXWindowClass)();
+
+#define kFLEXallWindowLevel 2050
 #define kFLEXallLongPressType 1337
 #define kFLEXallBlacklistPath @"/var/mobile/Library/Preferences/com.dgh0st.flexall.blacklist.plist"
 #define kFLEXallObjectGraphSectionTitle @"Object Graph"
@@ -101,8 +107,8 @@ typedef NS_ENUM(NSUInteger, FLEXObjectExplorerSection) { // Pre-FLEX 4
 
 static UILongPressGestureRecognizer *RegisterLongPressGesture(UIWindow *window, NSUInteger fingers) {
 	UILongPressGestureRecognizer *longPress = nil;
-	if (![window isKindOfClass:%c(FLEXWindow)]) {
-		longPress = [[UILongPressGestureRecognizer alloc] initWithTarget:[%c(FLEXManager) sharedManager] action:@selector(showExplorer)];
+	if (![window isKindOfClass:GetFLXWindowClass()]) {
+		longPress = [[UILongPressGestureRecognizer alloc] initWithTarget:GetFLXManager() action:GetFLXRevealSEL()];
 		longPress.numberOfTouchesRequired = fingers;
 		[window addGestureRecognizer:longPress];
 	}
@@ -156,8 +162,9 @@ static UILongPressGestureRecognizer *RegisterLongPressGesture(UIWindow *window, 
 
 -(id)initWithFrame:(CGRect)arg1 {
 	self = %orig(arg1);
-	if (self != nil)
-		self.windowLevel = 2050; // above springboard alert window but below flash window (and callout bar stuff)
+	if (self != nil) {
+		[self setWindowLevel:kFLEXallWindowLevel]; // above springboard alert window but below flash window (and callout bar stuff)
+	}
 	return self;
 }
 %end
@@ -166,7 +173,8 @@ static UILongPressGestureRecognizer *RegisterLongPressGesture(UIWindow *window, 
 -(void)viewDidLoad {
 	%orig();
 
-	if (self.navigationItem.rightBarButtonItems.count == 0) {
+	FLEXManager *manager = GetFLXManager();
+	if (self.navigationItem.rightBarButtonItems.count == 0 && [manager.explorerViewController respondsToSelector:@selector(resignKeyAndDismissViewControllerAnimated:completion:)]) {
 		self.navigationItem.rightBarButtonItem = [[UIBarButtonItem alloc] initWithBarButtonSystemItem:UIBarButtonSystemItemDone target:self action:@selector(handleDonePressed:)];
 	}
 }
@@ -209,11 +217,9 @@ static UILongPressGestureRecognizer *RegisterLongPressGesture(UIWindow *window, 
 
 %new
 -(void)handleDonePressed:(id)arg1 {
-	FLEXManager *flexManager = [%c(FLEXManager) sharedManager];
-	if ([flexManager.explorerViewController respondsToSelector:@selector(resignKeyAndDismissViewControllerAnimated:completion:)]) { // Pre-FLEX 4
-		[flexManager.explorerViewController resignKeyAndDismissViewControllerAnimated:YES completion:nil];
-	} else { // FLEX 4+
-		[flexManager.explorerViewController dismissViewControllerAnimated:YES completion:nil];
+	FLEXManager *manager = GetFLXManager();
+	if ([manager.explorerViewController respondsToSelector:@selector(resignKeyAndDismissViewControllerAnimated:completion:)]) { // Pre-FLEX 4
+		[manager.explorerViewController resignKeyAndDismissViewControllerAnimated:YES completion:nil];
 	}
 }
 %end
@@ -251,7 +257,7 @@ static UILongPressGestureRecognizer *RegisterLongPressGesture(UIWindow *window, 
 // handled in applications
 -(void)handleTapAction:(UIStatusBarTapAction *)arg1 {
 	if (arg1.type == kFLEXallLongPressType) {
-		[[%c(FLEXManager) sharedManager] showExplorer];
+		[GetFLXManager() performSelector:GetFLXRevealSEL()];
 	} else {
 		%orig(arg1);
 	}
@@ -301,6 +307,18 @@ static SBDashBoardIdleTimerProvider *GetDashBoardIdleTimerProvider() {
 %end
 %end
 
+static id FallbackFLXGetManager() {
+	return [%c(FLEXManager) sharedManager];
+}
+
+static SEL FallbackFLXRevealSEL() {
+	return @selector(showExplorer);
+}
+
+static Class FallbackFLXWindowClass() {
+	return %c(FLEXWindow);
+}
+
 %ctor {
 	NSArray *args = [[NSProcessInfo processInfo] arguments];
 	if (args != nil && args.count != 0) {
@@ -331,18 +349,27 @@ static SBDashBoardIdleTimerProvider *GetDashBoardIdleTimerProvider() {
 
 		NSString *processBundleIdentifier = [NSBundle mainBundle].bundleIdentifier;
 		BOOL isBlacklisted = [blacklistedProcesses containsObject:processBundleIdentifier];
-		if (!isBlacklisted && (isSpringBoard || isApplication) && dlopen("/Library/MobileSubstrate/DynamicLibraries/libFLEX.dylib", RTLD_LAZY)) {
-			if (%c(UIStatusBarManager)) {
-				%init(iOS13plusStatusBar);
-			}
+		if (!isBlacklisted) {
+			if ((isSpringBoard || isApplication)) {
+				void *handle = dlopen("/Library/MobileSubstrate/DynamicLibraries/libFLEX.dylib", RTLD_LAZY);
+				if (handle != NULL) {
+					GetFLXManager = (id(*)())dlsym(handle, "FLXGetManager") ?: &FallbackFLXGetManager;
+					GetFLXRevealSEL = (SEL(*)())dlsym(handle, "FLXRevealSEL") ?: &FallbackFLXRevealSEL;
+					GetFLXWindowClass = (Class(*)())dlsym(handle, "FLXWindowClass") ?: &FallbackFLXWindowClass;
 
-			if (%c(SBBacklightController) && [%c(SBBacklightController) instancesRespondToSelector:@selector(resetLockScreenIdleTimer)]) {
-				%init(preiOS11ResetIdleTimer);
-			} else if (%c(SBCoverSheetPresentationManager)) {
-				%init(iOS11plusDisableIdleTimer);
-			}
+					if (%c(UIStatusBarManager)) {
+						%init(iOS13plusStatusBar);
+					}
 
-			%init();
+					if (%c(SBBacklightController) && [%c(SBBacklightController) instancesRespondToSelector:@selector(resetLockScreenIdleTimer)]) {
+						%init(preiOS11ResetIdleTimer, FLEXWindow=GetFLXWindowClass());
+					} else if (%c(SBCoverSheetPresentationManager)) {
+						%init(iOS11plusDisableIdleTimer, FLEXManager=[GetFLXManager() class]);
+					}
+
+					%init(FLEXWindow=GetFLXWindowClass());
+				}
+			}
 		}
 	}
 }
