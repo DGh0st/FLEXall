@@ -351,7 +351,7 @@ static Class FallbackFLXWindowClass() {
 		BOOL isBlacklisted = [blacklistedProcesses containsObject:processBundleIdentifier];
 		if (!isBlacklisted) {
 			if ((isSpringBoard || isApplication)) {
-				void *handle = dlopen("/Library/MobileSubstrate/DynamicLibraries/libFLEX.dylib", RTLD_LAZY);
+				void *handle = dlopen("/Library/MobileSubstrate/DynamicLibraries/libFLEX.dylib", 0x1); // RTLD_LAZY
 				if (handle != NULL) {
 					GetFLXManager = (id(*)())dlsym(handle, "FLXGetManager") ?: &FallbackFLXGetManager;
 					GetFLXRevealSEL = (SEL(*)())dlsym(handle, "FLXRevealSEL") ?: &FallbackFLXRevealSEL;
