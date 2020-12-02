@@ -1,3 +1,5 @@
+#include <dlfcn.h>
+
 @interface SpringBoard : UIApplication // iOS 3 - 13
 -(BOOL)isLocked; // iOS 4 - 13
 // -(id)_accessibilityTopDisplay; // iOS 5 - 13
