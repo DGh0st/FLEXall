@@ -1,3 +1,5 @@
+#include <dlfcn.h>
+
 @interface SpringBoard : UIApplication // iOS 3 - 13
 -(BOOL)isLocked; // iOS 4 - 13
 // -(id)_accessibilityTopDisplay; // iOS 5 - 13
@@ -351,7 +353,7 @@ static Class FallbackFLXWindowClass() {
 		BOOL isBlacklisted = [blacklistedProcesses containsObject:processBundleIdentifier];
 		if (!isBlacklisted) {
 			if ((isSpringBoard || isApplication)) {
-				void *handle = dlopen("/Library/MobileSubstrate/DynamicLibraries/libFLEX.dylib", 0x1); // RTLD_LAZY
+				void *handle = dlopen("/Library/MobileSubstrate/DynamicLibraries/libFLEX.dylib", RTLD_LAZY);
 				if (handle != NULL) {
 					GetFLXManager = (id(*)())dlsym(handle, "FLXGetManager") ?: &FallbackFLXGetManager;
 					GetFLXRevealSEL = (SEL(*)())dlsym(handle, "FLXRevealSEL") ?: &FallbackFLXRevealSEL;
