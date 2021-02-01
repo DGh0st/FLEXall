@@ -96,6 +96,12 @@ typedef NS_ENUM(NSUInteger, FLEXObjectExplorerSection) { // Pre-FLEX 4
 @property (nonatomic, strong) UILongPressGestureRecognizer *flexAllLongPress;
 @end
 
+@interface FLEXallGestureManager : NSObject
+@property (nonatomic, assign) void *flexHandle;
++(instancetype)sharedManager;
+-(void)show;
+@end
+
 // libflex symbols
 static id (*GetFLXManager)();
 static SEL (*GetFLXRevealSEL)();
@@ -109,8 +115,9 @@ static Class (*GetFLXWindowClass)();
 
 static UILongPressGestureRecognizer *RegisterLongPressGesture(UIWindow *window, NSUInteger fingers) {
 	UILongPressGestureRecognizer *longPress = nil;
-	if (![window isKindOfClass:GetFLXWindowClass()]) {
-		longPress = [[UILongPressGestureRecognizer alloc] initWithTarget:GetFLXManager() action:GetFLXRevealSEL()];
+	Class flexWindowClass = GetFLXWindowClass();
+	if (flexWindowClass == nil || ![window isKindOfClass:flexWindowClass]) {
+		longPress = [[UILongPressGestureRecognizer alloc] initWithTarget:[FLEXallGestureManager sharedManager] action:@selector(show)];
 		longPress.numberOfTouchesRequired = fingers;
 		[window addGestureRecognizer:longPress];
 	}
@@ -138,6 +145,48 @@ static UILongPressGestureRecognizer *RegisterLongPressGesture(UIWindow *window, 
 }
 %end
 
+%hook UIStatusBarWindow
+-(id)initWithFrame:(CGRect)arg1 {
+	self = %orig(arg1);
+	if (self != nil) {
+		RegisterLongPressGesture(self, 1);
+	}
+	return self;
+}
+%end
+
+%group iOS13plusStatusBar
+// runs in SpringBoard
+%hook SBMainDisplaySceneLayoutStatusBarView
+-(void)_addStatusBarIfNeeded {
+	%orig();
+
+	UIStatusBar *_statusBar = [self valueForKey:@"_statusBar"];
+	UILongPressGestureRecognizer *longPress = [[UILongPressGestureRecognizer alloc] initWithTarget:self action:@selector(_statusBarLongPressed:)];
+	[_statusBar addGestureRecognizer:longPress];
+}
+
+%new
+-(void)_statusBarLongPressed:(UILongPressGestureRecognizer *)recognizer {
+	if (recognizer.state == UIGestureRecognizerStateBegan) {
+		[self _statusBarTapped:recognizer type:kFLEXallLongPressType];
+	}
+}
+%end
+
+%hook UIStatusBarManager
+// handled in applications
+-(void)handleTapAction:(UIStatusBarTapAction *)arg1 {
+	if (arg1.type == kFLEXallLongPressType) {
+		[[FLEXallGestureManager sharedManager] show];
+	} else {
+		%orig(arg1);
+	}
+}
+%end
+%end
+
+%group commonFLEXHooks
 %hook UIViewController
 -(BOOL)_canShowWhileLocked {
 	UIViewController *currentViewController = self;
@@ -225,46 +274,6 @@ static UILongPressGestureRecognizer *RegisterLongPressGesture(UIWindow *window, 
 	}
 }
 %end
-
-%hook UIStatusBarWindow
--(id)initWithFrame:(CGRect)arg1 {
-	self = %orig(arg1);
-	if (self != nil) {
-		RegisterLongPressGesture(self, 1);
-	}
-	return self;
-}
-%end
-
-%group iOS13plusStatusBar
-// runs in SpringBoard
-%hook SBMainDisplaySceneLayoutStatusBarView
--(void)_addStatusBarIfNeeded {
-	%orig();
-
-	UIStatusBar *_statusBar = [self valueForKey:@"_statusBar"];
-	UILongPressGestureRecognizer *longPress = [[UILongPressGestureRecognizer alloc] initWithTarget:self action:@selector(_statusBarLongPressed:)];
-	[_statusBar addGestureRecognizer:longPress];
-}
-
-%new
--(void)_statusBarLongPressed:(UILongPressGestureRecognizer *)recognizer {
-	if (recognizer.state == UIGestureRecognizerStateBegan) {
-		[self _statusBarTapped:recognizer type:kFLEXallLongPressType];
-	}
-}
-%end
-
-%hook UIStatusBarManager
-// handled in applications
--(void)handleTapAction:(UIStatusBarTapAction *)arg1 {
-	if (arg1.type == kFLEXallLongPressType) {
-		[GetFLXManager() performSelector:GetFLXRevealSEL()];
-	} else {
-		%orig(arg1);
-	}
-}
-%end
 %end
 
 %group iOS11plusDisableIdleTimer
@@ -321,6 +330,61 @@ static Class FallbackFLXWindowClass() {
 	return %c(FLEXWindow);
 }
 
+@implementation FLEXallGestureManager
++(instancetype)sharedManager {
+	static FLEXallGestureManager *_sharedManager = nil;
+	static dispatch_once_t onceToken;
+	dispatch_once(&onceToken, ^{
+		_sharedManager = [[self alloc] init];
+	});
+	return _sharedManager;
+}
+
+-(instancetype)init {
+	self = [super init];
+	self.flexHandle = NULL;
+	return self;
+}
+
+-(void)_loadFLEXIfNeeded {
+	@synchronized(self) {
+		if (self.flexHandle == NULL) {
+			self.flexHandle = dlopen("/Library/MobileSubstrate/DynamicLibraries/libFLEX.dylib", RTLD_LAZY);
+			if (self.flexHandle != NULL) {
+				GetFLXManager = (id(*)())dlsym(self.flexHandle, "FLXGetManager") ?: &FallbackFLXGetManager;
+				GetFLXRevealSEL = (SEL(*)())dlsym(self.flexHandle, "FLXRevealSEL") ?: &FallbackFLXRevealSEL;
+				GetFLXWindowClass = (Class(*)())dlsym(self.flexHandle, "FLXWindowClass") ?: &FallbackFLXWindowClass;
+
+				if (%c(SBBacklightController) && [%c(SBBacklightController) instancesRespondToSelector:@selector(resetLockScreenIdleTimer)]) {
+					%init(preiOS11ResetIdleTimer, FLEXWindow=GetFLXWindowClass());
+				} else if (%c(SBCoverSheetPresentationManager)) {
+					%init(iOS11plusDisableIdleTimer, FLEXManager=[GetFLXManager() class]);
+				}
+
+				%init(commonFLEXHooks, FLEXWindow=GetFLXWindowClass());
+			} else {
+				// TODO: potentially add alert with dlerror
+			}
+		}
+	}
+}
+
+-(void)show {
+	[self _loadFLEXIfNeeded];
+
+	FLEXManager *manager = GetFLXManager();
+	SEL showSelector = GetFLXRevealSEL();
+	if (manager != nil && showSelector != NULL)
+		[manager performSelector:showSelector];
+}
+
+-(void)dealloc {
+	if (self.flexHandle != NULL)
+		dlclose(self.flexHandle);
+	self.flexHandle = NULL;
+}
+@end
+
 %ctor {
 	NSArray *args = [[NSProcessInfo processInfo] arguments];
 	if (args != nil && args.count != 0) {
@@ -353,24 +417,15 @@ static Class FallbackFLXWindowClass() {
 		BOOL isBlacklisted = [blacklistedProcesses containsObject:processBundleIdentifier];
 		if (!isBlacklisted) {
 			if ((isSpringBoard || isApplication)) {
-				void *handle = dlopen("/Library/MobileSubstrate/DynamicLibraries/libFLEX.dylib", RTLD_LAZY);
-				if (handle != NULL) {
-					GetFLXManager = (id(*)())dlsym(handle, "FLXGetManager") ?: &FallbackFLXGetManager;
-					GetFLXRevealSEL = (SEL(*)())dlsym(handle, "FLXRevealSEL") ?: &FallbackFLXRevealSEL;
-					GetFLXWindowClass = (Class(*)())dlsym(handle, "FLXWindowClass") ?: &FallbackFLXWindowClass;
+				GetFLXManager = &FallbackFLXGetManager;
+				GetFLXRevealSEL = &FallbackFLXRevealSEL;
+				GetFLXWindowClass = &FallbackFLXWindowClass;
 
-					if (%c(UIStatusBarManager)) {
-						%init(iOS13plusStatusBar);
-					}
-
-					if (%c(SBBacklightController) && [%c(SBBacklightController) instancesRespondToSelector:@selector(resetLockScreenIdleTimer)]) {
-						%init(preiOS11ResetIdleTimer, FLEXWindow=GetFLXWindowClass());
-					} else if (%c(SBCoverSheetPresentationManager)) {
-						%init(iOS11plusDisableIdleTimer, FLEXManager=[GetFLXManager() class]);
-					}
-
-					%init(FLEXWindow=GetFLXWindowClass());
+				if (%c(UIStatusBarManager)) {
+					%init(iOS13plusStatusBar);
 				}
+
+				%init();
 			}
 		}
 	}
