@@ -187,6 +187,13 @@ static UILongPressGestureRecognizer *RegisterLongPressGesture(UIWindow *window, 
 %end
 
 %group commonFLEXHooks
+%hook NSObject
+%new
++ (NSBundle *)__bundle__ {
+	return [NSBundle bundleForClass:self];
+}
+%end
+
 %hook UIViewController
 -(BOOL)_canShowWhileLocked {
 	UIViewController *currentViewController = self;
