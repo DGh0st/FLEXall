@@ -1,4 +1,6 @@
 #include <dlfcn.h>
+#import <Foundation/Foundation.h>
+#import <UIKit/UIKit.h>
 
 @interface SpringBoard : UIApplication // iOS 3 - 13
 -(BOOL)isLocked; // iOS 4 - 13
@@ -86,6 +88,7 @@ typedef NS_ENUM(NSUInteger, FLEXObjectExplorerSection) { // Pre-FLEX 4
 
 @interface FLEXObjectExplorerViewController : UITableViewController
 @property (nonatomic, readonly) FLEXTableViewSection *customSection; // FLEX 4+
+@property (nonatomic, readonly) FLEXTableViewSection *customSections; // FLEX 5+
 @end
 
 @interface NSObject (PrivateFLEXall)
@@ -255,7 +258,12 @@ static UILongPressGestureRecognizer *RegisterLongPressGesture(UIWindow *window, 
 		return NO;
 	}]];
 
-	NSUInteger customSectionIndex = [sections indexOfObject:self.customSection];
+	NSUInteger customSectionIndex;
+	if ([self respondsToSelector:@selector(customSections)])
+		customSectionIndex = [sections indexOfObject:self.customSections];
+	else
+		customSectionIndex = [sections indexOfObject:self.customSection];
+
 	if (customSectionIndex != NSNotFound && singleRowSections.count > 0) {
 		NSMutableArray<FLEXTableViewSection *> *newSections = [sections mutableCopy];
 		[newSections removeObjectsInArray:singleRowSections];
