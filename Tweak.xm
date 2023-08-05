@@ -1,4 +1,5 @@
 #include <dlfcn.h>
+#include <UIKit/UIKit.h>
 
 @interface SpringBoard : UIApplication // iOS 3 - 13
 -(BOOL)isLocked; // iOS 4 - 13
@@ -85,7 +86,7 @@ typedef NS_ENUM(NSUInteger, FLEXObjectExplorerSection) { // Pre-FLEX 4
 @end
 
 @interface FLEXObjectExplorerViewController : UITableViewController
-@property (nonatomic, readonly) FLEXTableViewSection *customSection; // FLEX 4+
+@property (nonatomic, readonly) FLEXTableViewSection *customSection; // FLEX 4 - 5
 @end
 
 @interface NSObject (PrivateFLEXall)
@@ -247,20 +248,22 @@ static UILongPressGestureRecognizer *RegisterLongPressGesture(UIWindow *window, 
 -(NSArray<FLEXTableViewSection *> *)makeSections { // FLEX 4+
 	NSArray<FLEXTableViewSection *> *sections = %orig();
 
-	// FLEX should never add another one of thse but this should work even if it does
-	NSArray<FLEXTableViewSection *> *singleRowSections = [sections filteredArrayUsingPredicate:[NSPredicate predicateWithBlock:^(FLEXTableViewSection *evaluatedObject, NSDictionary<NSString *,id> *bindings) {
-		if ([evaluatedObject isKindOfClass:%c(FLEXSingleRowSection)] && [evaluatedObject.title isEqualToString:kFLEXallObjectGraphSectionTitle]) {
-			return YES;
-		}
-		return NO;
-	}]];
+	if ([self respondsToSelector:@selector(customSection)]) {
+		// FLEX should never add another one of thse but this should work even if it does
+		NSArray<FLEXTableViewSection *> *singleRowSections = [sections filteredArrayUsingPredicate:[NSPredicate predicateWithBlock:^(FLEXTableViewSection *evaluatedObject, NSDictionary<NSString *,id> *bindings) {
+			if ([evaluatedObject isKindOfClass:%c(FLEXSingleRowSection)] && [evaluatedObject.title isEqualToString:kFLEXallObjectGraphSectionTitle]) {
+				return YES;
+			}
+			return NO;
+		}]];
 
-	NSUInteger customSectionIndex = [sections indexOfObject:self.customSection];
-	if (customSectionIndex != NSNotFound && singleRowSections.count > 0) {
-		NSMutableArray<FLEXTableViewSection *> *newSections = [sections mutableCopy];
-		[newSections removeObjectsInArray:singleRowSections];
-		[newSections insertObjects:singleRowSections atIndexes:[NSIndexSet indexSetWithIndexesInRange:NSMakeRange(customSectionIndex + 1, singleRowSections.count)]];
-		sections = [newSections copy];
+		NSUInteger customSectionIndex = [sections indexOfObject:self.customSection];
+		if (customSectionIndex != NSNotFound && singleRowSections.count > 0) {
+			NSMutableArray<FLEXTableViewSection *> *newSections = [sections mutableCopy];
+			[newSections removeObjectsInArray:singleRowSections];
+			[newSections insertObjects:singleRowSections atIndexes:[NSIndexSet indexSetWithIndexesInRange:NSMakeRange(customSectionIndex + 1, singleRowSections.count)]];
+			sections = [newSections copy];
+		}
 	}
 
 	return sections;
