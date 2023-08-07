@@ -1,4 +1,5 @@
 #include <dlfcn.h>
+#include <rootless.h>
 #include <UIKit/UIKit.h>
 
 @interface SpringBoard : UIApplication // iOS 3 - 13
@@ -110,7 +111,7 @@ static Class (*GetFLXWindowClass)();
 
 #define kFLEXallWindowLevel 2050
 #define kFLEXallLongPressType 1337
-#define kFLEXallBlacklistPath @"/var/mobile/Library/Preferences/com.dgh0st.flexall.blacklist.plist"
+#define kFLEXallBlacklistPath ROOT_PATH_NS(@"/var/mobile/Library/Preferences/com.dgh0st.flexall.blacklist.plist")
 #define kFLEXallObjectGraphSectionTitle @"Object Graph"
 #define kFLEXallDisableIdleTimerReason @"FLEXallDisableIdle"
 
@@ -352,7 +353,7 @@ static Class FallbackFLXWindowClass() {
 -(void)_loadFLEXIfNeeded {
 	@synchronized(self) {
 		if (self.flexHandle == NULL) {
-			self.flexHandle = dlopen("/Library/MobileSubstrate/DynamicLibraries/libFLEX.dylib", RTLD_LAZY);
+			self.flexHandle = dlopen(ROOT_PATH("/Library/MobileSubstrate/DynamicLibraries/libFLEX.dylib"), RTLD_LAZY);
 			if (self.flexHandle != NULL) {
 				GetFLXManager = (id(*)())dlsym(self.flexHandle, "FLXGetManager") ?: &FallbackFLXGetManager;
 				GetFLXRevealSEL = (SEL(*)())dlsym(self.flexHandle, "FLXRevealSEL") ?: &FallbackFLXRevealSEL;
