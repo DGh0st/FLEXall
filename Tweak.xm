@@ -100,6 +100,7 @@ typedef NS_ENUM(NSUInteger, FLEXObjectExplorerSection) { // Pre-FLEX 4
 
 @interface FLEXallGestureManager : NSObject
 @property (nonatomic, assign) void *flexHandle;
+@property (nonatomic, assign) void *reflexHandle;
 +(instancetype)sharedManager;
 -(void)show;
 @end
@@ -114,6 +115,8 @@ static Class (*GetFLXWindowClass)();
 #define kFLEXallBlacklistPath ROOT_PATH_NS(@"/var/mobile/Library/Preferences/com.dgh0st.flexall.blacklist.plist")
 #define kFLEXallObjectGraphSectionTitle @"Object Graph"
 #define kFLEXallDisableIdleTimerReason @"FLEXallDisableIdle"
+#define kFLEXallFlexPath ROOT_PATH("/Library/MobileSubstrate/DynamicLibraries/libFLEX.dylib")
+#define kFLEXallReflexPath ROOT_PATH("/Library/MobileSubstrate/DynamicLibraries/libreflex.dylib")
 
 static UILongPressGestureRecognizer *RegisterLongPressGesture(UIWindow *window, NSUInteger fingers) {
 	UILongPressGestureRecognizer *longPress = nil;
@@ -347,13 +350,14 @@ static Class FallbackFLXWindowClass() {
 -(instancetype)init {
 	self = [super init];
 	self.flexHandle = NULL;
+	self.reflexHandle = NULL;
 	return self;
 }
 
 -(void)_loadFLEXIfNeeded {
 	@synchronized(self) {
-		if (self.flexHandle == NULL) {
-			self.flexHandle = dlopen(ROOT_PATH("/Library/MobileSubstrate/DynamicLibraries/libFLEX.dylib"), RTLD_LAZY);
+		if (self.flexHandle == NULL && [[NSFileManager defaultManager] fileExistsAtPath:@(kFLEXallFlexPath)]) {
+			self.flexHandle = dlopen(kFLEXallFlexPath, RTLD_LAZY);
 			if (self.flexHandle != NULL) {
 				GetFLXManager = (id(*)())dlsym(self.flexHandle, "FLXGetManager") ?: &FallbackFLXGetManager;
 				GetFLXRevealSEL = (SEL(*)())dlsym(self.flexHandle, "FLXRevealSEL") ?: &FallbackFLXRevealSEL;
@@ -369,6 +373,10 @@ static Class FallbackFLXWindowClass() {
 			} else {
 				// TODO: potentially add alert with dlerror
 			}
+		}
+
+		if (self.reflexHandle == NULL && [[NSFileManager defaultManager] fileExistsAtPath:@(kFLEXallReflexPath)]) {
+			self.reflexHandle = dlopen(kFLEXallReflexPath, RTLD_LAZY);
 		}
 	}
 }
@@ -386,6 +394,10 @@ static Class FallbackFLXWindowClass() {
 	if (self.flexHandle != NULL)
 		dlclose(self.flexHandle);
 	self.flexHandle = NULL;
+
+	if (self.reflexHandle != NULL)
+		dlclose(self.reflexHandle);
+	self.reflexHandle = NULL;
 }
 @end
 
